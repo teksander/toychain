@@ -94,9 +94,10 @@ class NodeServerThread(threading.Thread):
         data = self.receive(sock)
         try:
             answer = pickle.loads(data)
-        except EOFError as e:
-            print(data)
-            raise e
+        except:
+            print('UNPICKLING ERROR IGNORED')
+            answer = None
+            # pass
         self.message_handler.handle_answer(answer)
 
         sock.close()

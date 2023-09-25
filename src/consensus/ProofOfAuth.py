@@ -14,7 +14,7 @@ logger = logging.getLogger('poa')
 BLOCK_PERIOD = 150
 DIFF_NOTURN = 1
 DIFF_INTURN = 2
-DELAY_NOTURN = 40
+DELAY_NOTURN = 100
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]

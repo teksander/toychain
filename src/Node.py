@@ -164,12 +164,18 @@ class Node:
             logger.info("Chain does not fit here")
 
     def add_peer(self, enode):
-        if enode not in self.peers:
-            logger.debug(f"Node {self.id} adding peer at {enode}")
-            parsed_enode = urllib.parse.urlparse(enode)
-            node_info = {"id": parsed_enode.username, "host": parsed_enode.hostname, "port": parsed_enode.port, "enode": enode}
-            self.peers[enode] = node_info
-            return True
+        # if len(self.peers) > 5:
+        #     print('max peers reached')
+        #     return False
+        
+        if enode in self.peers:
+            return False
+
+        logger.debug(f"Node {self.id} adding peer at {enode}")
+        parsed_enode = urllib.parse.urlparse(enode)
+        node_info = {"id": parsed_enode.username, "host": parsed_enode.hostname, "port": parsed_enode.port, "enode": enode}
+        self.peers[enode] = node_info
+        return True
 
     def remove_peer(self, enode):
         if self.peers.pop(enode, None):
