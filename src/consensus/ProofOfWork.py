@@ -1,28 +1,31 @@
-"""
-Every consensus should have :
-- a genesis block
-- a block generation thread
-- a block verification function
-"""
 import copy
-import logging
 import threading
 from random import randint
-from time import time
+from time import time, sleep
 
 from toychain.src import constants
-from toychain.src.Block import Block
+from toychain.src.Block import Block, State
+from toychain.src.utils import gen_enode
 
-MINING_DIFFICULTY = 18  # Approx One block every 7 seconds
-GENESIS_BLOCK = Block(0, 0000000, [], 0, 0, MINING_DIFFICULTY, 0, 0)
+import logging
+logger = logging.getLogger('pow')
 
+# Parameters for Proof-of-Work
+MINING_DIFFICULTY = 99900  
+DIFF_CAP = 100000
+ROBOT_HASHPOWER = 1
+
+# Default genesis block when argument is not passed when creating node
+GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State())
 
 class ProofOfWork:
-    def __init__(self):
-        self.genesis = GENESIS_BLOCK
-        self.block_generation = MiningThread
+    def __init__(self, genesis = GENESIS_BLOCK):
+        self.genesis = genesis
+        self.block_generation = VirtualMining
 
-        self.trust = False
+        # Boolean to check or not the block states
+        self.trust = True
+        self.trust_mining = True # must be true for virtual mining
 
     def verify_chain(self, chain, previous_state):
         last_block = chain[0]
@@ -50,6 +53,7 @@ class ProofOfWork:
         return True
 
     def verify_block(self, block, previous_state):
+
         # Verify block state
         if not self.trust:
             s = copy.deepcopy(previous_state)
@@ -62,17 +66,198 @@ class ProofOfWork:
                 return False
 
         # Verify the difficulty of the mining
-        target_string = '1' * (256 - block.difficulty)
-        target_string = target_string.zfill(256)
+        if not self.trust_mining:
+            target_string = '1' * (256 - block.difficulty)
+            target_string = target_string.zfill(256)
 
-        hash_int = int(block.hash, 16)
-        binary_hash = bin(hash_int)
-        binary_hash = binary_hash[3:]
+            hash_int = int(block.hash, 16)
+            binary_hash = bin(hash_int)
+            binary_hash = binary_hash[3:]
 
-        if target_string > binary_hash:
-            return True
-        return False
+            if target_string <= binary_hash:
+                return False
 
+        return True
+        
+class VirtualMining():
+    """
+    Thread class that generate blocks that answer to the consensus rules
+    This block generation is done according to the proof of work
+    """
+
+    def __init__(self, node):
+
+        self.node = node
+        self.difficulty = MINING_DIFFICULTY
+        self.timer = self.node.custom_timer
+
+        self.flag = False
+        self.sleep = 0
+        
+    def run(self):
+        """
+        Perform Virtual Mining (lottery)
+        """
+
+        difficulty = randint(0, DIFF_CAP)
+        if difficulty <= ROBOT_HASHPOWER*MINING_DIFFICULTY:  
+            return
+
+        # I won the mining lottery 
+        print('CREATED A BLOCK')
+        timestamp = self.timer.time()      
+        previous_block = copy.deepcopy(self.node.get_block('last'))
+        previous_state = previous_block.state
+        mempool = list((self.node.mempool.copy().values()))
+
+        # Filter out transactions already on the blockchain
+        data = [tx for tx in mempool if tx.id not in self.node.previous_transactions_id]
+
+        # Generate the new block
+        block = Block(
+                    previous_block.height+1, 
+                    previous_block.hash, 
+                    data,
+                    self.node.enode,
+                    timestamp, 
+                    difficulty, 
+                    previous_block.total_difficulty, 
+                    state = previous_state)
+
+        # Apply transactions to obtain the new state variables
+        for transaction in block.data:
+            block.state.apply_transaction(transaction, block)
+
+        # Update the blockchain and mempool
+        self.node.chain.append(block)
+        self.node.previous_transactions_id.update([tx.id for tx in block.data])
+        self.node.mempool.clear()
+
+        logger.info(f"Block produced by Node {self.node.id}: ")
+        logger.info(f"{repr(block)}")
+        logger.info(f"{block.state.state_variables} \n")
+
+    def step(self):
+        if self.flag:
+            if self.sleep > 0:
+                self.sleep -= 1
+            else:
+                self.run()
+
+    def start(self):
+        self.flag = True
+
+    def stop(self):
+        self.flag = False
+
+    def update_block(self, block, previous_block):
+        """
+        Updates the block by refreshing its information
+
+        Args:
+            block(Block): block in the production process
+            previous_block(Block): the previous block in the chain, it should be the last block
+        """
+        block.height = previous_block.height + 1
+        block.timestamp = self.timer.time()
+        block.parent_hash = previous_block.hash
+        block.total_difficulty = previous_block.total_difficulty + self.difficulty
+
+        # Reset the state variables and apply them
+        block.state.state_variables = previous_block.state.state_variables
+        for transaction in block.data:
+            block.state.apply_transaction(transaction)
+
+        block.compute_block_hash()
+
+class Mining():
+    """
+    Thread class that generate blocks that answer to the consensus rules
+    This block generation is done according to the proof of work
+    NOT FULLY IMPLEMENTED
+    """
+
+    def __init__(self, node):
+
+        self.node = node
+        self.difficulty = MINING_DIFFICULTY
+        self.timer = self.node.custom_timer
+
+        self.flag = False
+        
+    def run(self):
+        """
+        Increase the nonce until the hash of the block has the expected number of zeros at the front of the hash
+        """
+        timestamp = self.timer.time()
+
+        # Get the current block, state and mempool
+        previous_block = copy.deepcopy(self.node.get_block('last'))
+        previous_state = previous_block.state
+        mempool = list((self.node.mempool.copy().values()))
+
+        # Filter out transactions already on the blockchain
+        data = [tx for tx in mempool if tx.id not in self.node.previous_transactions_id]
+
+        # Generate the new block
+        block = Block(
+                    previous_block.height+1, 
+                    previous_block.hash, 
+                    data,
+                    self.node.enode,
+                    timestamp, 
+                    self.difficulty, 
+                    previous_block.total_difficulty, 
+                    nonce=randint(0,1000),
+                    state = previous_state)
+
+        # Apply transactions to obtain the new state variables
+        for transaction in block.data:
+            block.state.apply_transaction(transaction, block)
+
+        attempt = 0
+        while attempt < 10:
+            self.update_block(block, previous_block)
+
+            target_string = '1' * (256 - self.difficulty)
+            target_string = target_string.zfill(256)
+
+            hash_int = int(block.compute_block_hash(), 16)
+            binary_hash = bin(hash_int)
+            binary_hash = binary_hash[3:]
+
+            if binary_hash > target_string:
+                block.increase_nonce()
+
+            else:
+                self.node.chain.append(block)
+                self.node.mempool.clear()
+                logging.info(f"Block produced by Node {self.node.id}: ")
+                logging.info(f"{repr(block)}")
+                logging.info(f"###{block.state.state_variables}### \n")
+
+    def stop(self):
+        self.flag.set()
+
+    def update_block(self, block, previous_block):
+        """
+        Updates the block by refreshing its information
+
+        Args:
+            block(Block): block in the production process
+            previous_block(Block): the previous block in the chain, it should be the last block
+        """
+        block.height = previous_block.height + 1
+        block.timestamp = self.timer.time()
+        block.parent_hash = previous_block.hash
+        block.total_difficulty = previous_block.total_difficulty + self.difficulty
+
+        # Reset the state variables and apply them
+        block.state.state_variables = previous_block.state.state_variables
+        for transaction in block.data:
+            block.state.apply_transaction(transaction)
+
+        block.compute_block_hash()
 
 class MiningThread(threading.Thread):
     """

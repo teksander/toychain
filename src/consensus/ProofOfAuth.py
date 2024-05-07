@@ -10,7 +10,7 @@ from toychain.src.utils import gen_enode
 import logging
 logger = logging.getLogger('poa')
 
-# Default parameters for Proof-of-Authority
+# Parameters for Proof-of-Authority
 BLOCK_PERIOD = 150
 DIFF_NOTURN = 1
 DIFF_INTURN = 2
@@ -18,8 +18,7 @@ DELAY_NOTURN = 100
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]
-initial_state = State()
-GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = initial_state)
+GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = State())
 
 class ProofOfAuthority:
     """
@@ -159,10 +158,6 @@ class ProofOfAuth():
 
             # Filter out transactions already on the blockchain
             data = [tx for tx in mempool if tx.id not in self.node.previous_transactions_id]
-
-            # # Apply transactions to obtain the new state variables
-            # for transaction in data:
-            #     previous_state.apply_transaction(transaction)
             
             # Generate the new block
             block = Block(

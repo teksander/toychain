@@ -141,8 +141,8 @@ class State(StateMixin):
             self.robots      = {}
 
 
-    def robot(self, task = -1):
-        return {'task': task}
+    def robot(self):
+        return {'task': -1}
     
     def patch(self, x, y, qtty, util, qlty, json):
         return {
@@ -175,9 +175,13 @@ class State(StateMixin):
             'AP': 0
         }
 
-    def register(self):
+    def register(self, task = -1):
+
         if self.msg.sender not in self.robots:
             self.robots[self.msg.sender] = self.robot()
+
+        if task != -1:
+            self.joinPatchFixed(task)
 
     def updatePatch(self, x, y, qtty, util, qlty, json):
         # x, y, qtty, util, qlty, json, id, maxw, totw, last_assign, epoch, robots, allepochs
@@ -192,12 +196,6 @@ class State(StateMixin):
 
         else:
             new_patch = self.patch(x, y, qtty, util, qlty, json)
-            if self.msg.sender not in self.robots:
-                self.register()
-            self.robots[self.msg.sender]['task'] = new_patch['id']
-            new_patch["totw"] += 1
-            new_patch["last_assign"] = new_patch['epoch']['number']
-
             self.patches.append(new_patch)
 
     def dropResource(self, x, y, qtty, util, qlty, json, Q, TC):
@@ -238,17 +236,6 @@ class State(StateMixin):
                 logger.info(f"New epoch #{self.patches[i]['epoch']['number']+1} started")
                 self.patches[i]['epoch'] = self.epoch(old_epoch['number']+1, self.block.height, [], [], [], new_price)
                 
-
-                # self.patches[i]['epoch']['number'] += 1
-                # self.patches[i]['epoch']['start']  = self.block.height
-                # self.patches[i]['epoch']['Q']      = []
-                # self.patches[i]['epoch']['TC']     = []
-                # self.patches[i]['epoch']['ATC']    = []
-                # self.patches[i]['epoch']['price']  = new_price
-                # self.patches[i]['epoch']['TQ'] = 0
-                # self.patches[i]['epoch']['AATC'] = 0
-                # self.patches[i]['epoch']['AP']   = 0
-
         else:
             print(f'Patch {x},{y} not found')
 
@@ -259,7 +246,16 @@ class State(StateMixin):
                 self.patches[i]["totw"] += 1
                 self.patches[i]["last_assign"] = patch['epoch']['number']
 
-    
+    def joinPatchFixed(self, i): # Robot joins a specific patch
+
+        patch = self.patches[i]
+
+        print(f"fixed joining {patch['epoch']['number']} {patch['last_assign']}")
+
+        self.robots[self.msg.sender]['task'] = self.patches[i]['id']
+        self.patches[i]["totw"] += 1
+        self.patches[i]["last_assign"] = patch['epoch']['number']
+
     def joinPatch(self, x, y): # Robot joins a specific patch
 
         i, patch = self.findByPos(x, y)
