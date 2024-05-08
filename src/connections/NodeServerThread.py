@@ -7,10 +7,10 @@ import urllib.parse
 from queue import Queue
 from time import sleep
 
-from toychain.src import constants
-from toychain.src.MessageHandler import MessageHandler
-from toychain.src.constants import ENCODING
+from toychain.src.utils import constants
+from toychain.src.utils.constants import ENCODING
 
+from toychain.src.connections.MessageHandler import MessageHandler
 
 class NodeServerThread(threading.Thread):
     """

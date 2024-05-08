@@ -3,9 +3,10 @@ import threading
 from random import randint
 from time import time, sleep
 
-from toychain.src import constants
+from toychain.src.utils import constants
+from toychain.src.utils.helpers import gen_enode
+
 from toychain.src.Block import Block, State
-from toychain.src.utils import gen_enode
 
 import logging
 logger = logging.getLogger('pow')
