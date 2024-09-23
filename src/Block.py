@@ -1,8 +1,7 @@
 from random import randint
-from copy import copy
 
 from toychain.src.utils.helpers import compute_hash, transaction_to_dict
-from toychain.src.State import State
+from toychain.scs.deploy import Contract as State
 
 import logging
 logger = logging.getLogger('block')

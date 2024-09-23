@@ -98,6 +98,12 @@ class Node:
         self.stop_tcp()
         self.stop_mining()
 
+    def get_block_number(self):
+        """
+        returns the height of the latest block
+        """
+        return self.chain[-1].height
+
     def get_block(self, height):
         """
         returns the block at the referred height in the blockchain
@@ -189,6 +195,7 @@ class Node:
         return self.consensus.verify_chain(chain, self.get_block('last').state)
 
     def send_transaction(self, transaction):
+        logger.info(f"Sending transaction {transaction}")
         self.add_to_mempool(transaction)
         return transaction.id
 
