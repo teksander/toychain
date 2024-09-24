@@ -62,6 +62,14 @@ class Node:
         self.chain_sync_thread.step()
         self.mining_thread.step()
     
+    def start(self):
+        self.start_mining()
+        self.start_tcp()
+
+    def stop(self):
+        self.stop_mining()
+        self.stop_tcp()
+
     def start_mining(self):
         print(f"Node {self.id} started mining")
         self.mining_thread.start()

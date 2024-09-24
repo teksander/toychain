@@ -40,6 +40,7 @@ class StateMixin:
 
         # Check sender funds
         if tx.value and self.balances[tx.sender] < tx.value:
+            logger.info("Insufficient Balance")
             return
         
         # Apply the transfer of funds
