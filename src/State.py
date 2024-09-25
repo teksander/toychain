@@ -1,9 +1,7 @@
-
-from toychain.src.utils.helpers import compute_hash, transaction_to_dict
+from toychain.src.utils.helpers import compute_hash
 
 import logging
 logger = logging.getLogger('sc')
-
 
 class StateMixin:
     @property

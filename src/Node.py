@@ -248,6 +248,9 @@ class Node:
         for block in self.chain:
             print(block)
 
+    def get_total_difficulty(self):
+        return self.chain[-1].total_difficulty
+
     @property  
     def key(self):
         return self.id
