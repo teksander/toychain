@@ -4,15 +4,95 @@ import threading
 import socket
 import time
 import urllib.parse
-from queue import Queue
 from time import sleep
-
-from toychain.src.utils import constants
-from toychain.src.utils.constants import ENCODING
 
 from toychain.src.connections.MessageHandler import MessageHandler
 
 class NodeServerThread(threading.Thread):
+    """
+    Minimalist UDP-based node server thread with automatic message chunking and reassembly
+    """
+
+    CHUNK_SIZE = 1024  # Define the chunk size for UDP packets
+
+    def __init__(self, node, host, port, id):
+        super().__init__()
+        self.id = id
+        self.node = node
+        self.host = host
+        self.port = port
+        self.message_handler = MessageHandler(self)
+        self.terminate_flag = threading.Event()
+        print(f"Node {self.id} starting on port {self.port}")
+
+    def run(self):
+        """ Listen for incoming UDP messages """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((self.host, self.port))
+
+        while not self.terminate_flag.is_set():
+            try:
+                sock.settimeout(5)
+
+                # Receive data and client address
+                data, client_address = self.receive_large_message(sock)
+                if data:
+                    request = pickle.loads(data)
+                    answer = self.message_handler.handle_request(request)
+                    self.send_large_message(sock, pickle.dumps(answer), client_address)
+
+            except socket.timeout:
+                pass
+            except Exception as e:
+                raise e
+
+            sleep(0.00001)
+
+        sock.close()
+        print(f"Node {self.id} stopped")
+
+    def send_request(self, enode, request):
+        """ Send a request via UDP and receive the response """
+        parsed_enode = urllib.parse.urlparse(enode)
+        address = (parsed_enode.hostname, parsed_enode.port)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        # Send the request in chunks
+        self.send_large_message(sock, pickle.dumps(request), address)
+
+        # Receive the response in chunks
+        data = self.receive_large_message(sock)[0]
+        if data:
+            answer = pickle.loads(data)
+            self.message_handler.handle_answer(answer)
+
+        sock.close()
+
+    def send_large_message(self, sock, data, address):
+        """ Send large messages by splitting them into chunks """
+        chunks = [data[i:i + self.CHUNK_SIZE] for i in range(0, len(data), self.CHUNK_SIZE)]
+        for chunk in chunks:
+            sock.sendto(chunk, address)
+        # Send an empty chunk to indicate the end of transmission
+        sock.sendto(b'', address)
+
+    def receive_large_message(self, sock):
+        """ Reassemble large messages received in chunks and return the data and client address """
+        data = bytearray()
+        client_address = None
+        while True:
+            chunk, address = sock.recvfrom(self.CHUNK_SIZE)
+            if not client_address:
+                client_address = address  # Capture the client address from the first packet
+            if not chunk:  # Empty chunk signals end of transmission
+                break
+            data.extend(chunk)
+        return data if data else None, client_address
+
+    def stop(self):
+        self.terminate_flag.set()
+
+class NodeServerThreadTCP(threading.Thread):
     """
     Thread answering to requests, every node has one
     """

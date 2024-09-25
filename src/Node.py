@@ -2,7 +2,6 @@ import urllib.parse
 
 from toychain.src.connections.NodeServerThread import NodeServerThread
 from toychain.src.connections.Pingers import ChainPinger, MemPoolPinger
-from toychain.src.utils.constants import ENCODING, CHAIN_SYNC_INTERVAL, MEMPOOL_SYNC_INTERVAL, DEBUG
 from toychain.src.utils.helpers import CustomTimer, create_block_from_list
 from toychain.src.Block import Block
 
@@ -37,10 +36,9 @@ class Node:
 
         self.custom_timer = CustomTimer()
 
+        # Sync Threads
         self.node_server_thread = NodeServerThread(self, host, port, id)
         self.message_handler = self.node_server_thread.message_handler
-
-        # Sync Threads
         self.mempool_sync_thread = MemPoolPinger(self)
         self.chain_sync_thread = ChainPinger(self)
 
