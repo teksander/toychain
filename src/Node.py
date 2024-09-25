@@ -1,4 +1,4 @@
-import urllib.parse
+import urllib.parse, hashlib, json
 
 from toychain.src.connections.NodeServerThread import NodeServerThread
 from toychain.src.connections.Pingers import ChainPinger, MemPoolPinger
@@ -249,7 +249,25 @@ class Node:
             print(block)
 
     def get_total_difficulty(self):
-        return self.chain[-1].total_difficulty
+        return int(self.chain[-1].total_difficulty)
+
+    def mempool_hash(self, astype = None, digest_size = 1):
+        # Step 1: Convert each transaction to a serialized JSON string
+        serialized_mempool = [json.dumps(txn, sort_keys=True) for txn in self.mempool]
+        
+        # Step 2: Sort the serialized transactions to ensure order doesn't matter
+        serialized_mempool.sort()
+        
+        # Step 3: Concatenate the sorted serialized transactions
+        combined = ''.join(serialized_mempool)
+        
+        # Step 4: Hash the combined string using SHA-256
+        blake2s_hash = hashlib.blake2s(combined.encode(), digest_size=digest_size)
+        if astype == 'string' or astype == 'str' or astype == str:
+            return blake2s_hash.hexdigest()
+        if astype == 'integer' or astype == 'int' or astype == int:
+            return int.from_bytes(blake2s_hash.digest(), 'big')
+        return blake2s_hash
 
     @property  
     def key(self):
