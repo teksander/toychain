@@ -8,7 +8,7 @@ from time import sleep
 
 from toychain.src.connections.MessageHandler import MessageHandler
 
-class NodeServerThread(threading.Thread):
+class NodeServerThreadUDP(threading.Thread):
     """
     Minimalist UDP-based node server thread with automatic message chunking and reassembly
     """
@@ -92,7 +92,7 @@ class NodeServerThread(threading.Thread):
     def stop(self):
         self.terminate_flag.set()
 
-class NodeServerThreadTCP(threading.Thread):
+class NodeServerThread(threading.Thread):
     """
     Thread answering to requests, every node has one
     """
@@ -105,7 +105,7 @@ class NodeServerThreadTCP(threading.Thread):
         self.node = node
         self.host = host
         self.port = port
-        self.max_packet = 0
+        self.max_packet = 6000000
 
         self.message_handler = MessageHandler(self)
 
@@ -122,19 +122,19 @@ class NodeServerThreadTCP(threading.Thread):
         self.sock.bind((self.host, self.port))
 
         while not self.terminate_flag.is_set():
-            try:
-                self.sock.settimeout(5)
-                self.sock.listen(1)
-                client_sock, client_address = self.sock.accept()
-                self.handle_connection(client_sock)
+          try:
+            self.sock.settimeout(5)
+            self.sock.listen(1)
+            client_sock, client_address = self.sock.accept()
+            self.handle_connection(client_sock)
 
-            except socket.timeout:
-                pass
+          except socket.timeout:
+            pass
 
-            except Exception as e:
-                raise e
+          except Exception as e:
+            raise e
 
-            sleep(0.00001)
+          sleep(0.00001)
 
         self.sock.shutdown(True)
         self.sock.close()
@@ -164,20 +164,24 @@ class NodeServerThreadTCP(threading.Thread):
         # Send the request
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.connect(address)
-            self.send(pickle.dumps(request), sock)
+          sock.connect(address)
+          self.send(pickle.dumps(request), sock)
 
         except Exception as e:
-            print(f"Error Connecting to Address : {address}")
-            raise e
-            
+          print(f"Error Connecting to Address : {address}")
+          raise e
+          
         # Get the answer
-        data = self.receive(sock)
         try:
-            answer = pickle.loads(data)
+            data = self.receive(sock)
+        except:
+            print("Error receiving data")
+
+        try:
+          answer = pickle.loads(data)
         except EOFError as e:
-            print(data)
-            raise e
+          print(data)
+          raise e
         self.message_handler.handle_answer(answer)
 
         sock.close()
@@ -187,16 +191,25 @@ class NodeServerThreadTCP(threading.Thread):
 
     def send(self, data, sock):
         sock.sendall(data)
-    
 
     def receive(self, sock):
         data = []
-        while True:
-            packet = sock.recv(1024)
-            if len(packet) > self.max_packet:
-                # print('New max packet:', len(packet))
-                self.max_packet = len(packet)
-            data.append(packet)
-            if (len(packet) < 1024):
-                break
+        sock.settimeout(50)  # Set a timeout for the socket to prevent getting stuck indefinitely
+        try:
+            while True:
+                packet = sock.recv(4096)
+                if not packet:
+                    break  # No more data to receive
+                if len(packet) > self.max_packet:
+                    self.max_packet = len(packet)
+                data.append(packet)
+                if len(packet) < 4096:
+                    break  # End of the message
+        except socket.timeout:
+            print("Socket timed out. No more data to receive.")
+        except socket.error as e:
+            print(f"Socket error occurred: {e}")
+        finally:
+            sock.settimeout(None)  # Reset the timeout to the default (blocking mode)
+       
         return b"".join(data)
