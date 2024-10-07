@@ -1,3 +1,6 @@
+# Ignore the experiment dependent smart contract
+scs/deploy.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
