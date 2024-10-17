@@ -19,6 +19,7 @@ class Block:
         self.data = data
         self.miner_id = miner_id
         self.timestamp = timestamp
+        self.reception = 0
         self.difficulty = difficulty
         self.total_difficulty = total_diff + difficulty
 

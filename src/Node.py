@@ -147,6 +147,8 @@ class Node:
             block_vars = create_block_from_list(block_repr)
             chain.append(Block(*block_vars))
 
+        for block in chain:
+            block.reception = self.custom_timer.time()
         # if chain[-1].total_difficulty < self.get_block('last').total_difficulty:
         #     return
 
