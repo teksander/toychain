@@ -19,7 +19,8 @@ class Node:
         self.mempool = {}
 
         # Transactions contained in the chain
-        self.my_transaction_nonce = 0
+        self.my_transaction_nonce     = 0
+        self.my_transactions          = []
         self.previous_transactions_id = set()
 
         self.host = host
@@ -204,6 +205,8 @@ class Node:
 
     def send_transaction(self, transaction):
         logger.info(f"Sending transaction {transaction}")
+        self.my_transactions.append(transaction)
+        self.my_transaction_nonce += 1
         self.add_to_mempool(transaction)
         return transaction.id
 
