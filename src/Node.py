@@ -60,6 +60,11 @@ class Node:
         self.mempool_sync_thread.step()
         self.chain_sync_thread.step()
         self.mining_thread.step()
+
+        # Temporary test, should be removed soon:
+        all_tx_ids = set([tx.id for tx in self.get_all_transactions()])
+        if all_tx_ids != self.previous_transactions_id:
+            print("Some problem with previous transactions set")
     
     def start(self):
         self.start_mining()
@@ -70,7 +75,7 @@ class Node:
         self.stop_tcp()
 
     def start_mining(self):
-        print(f"Node {self.id} started mining")
+        logger.debug(f"Node {self.id} started mining")
         self.mining_thread.start()
         # x = threading.Thread(target=self.mining_thread.start())
         # x.start()
@@ -79,7 +84,7 @@ class Node:
     def stop_mining(self):
         self.mining_thread.stop()
         self.mining = False
-        print("Node " + str(self.id) + " stopped mining")
+        logger.debug("Node " + str(self.id) + " stopped mining")
 
     def start_tcp(self):
         """
@@ -135,48 +140,61 @@ class Node:
 
     def sync_chain(self, chain_repr, height):
         """
-        Adds the partial chain received to the blockchain
+        Append a partial chain to the blockchain
 
         Args:
             chain_repr(list[str]): list of block representation from a partial chain received
             height: the height at which the partial chain is supposed to be inserted
         """
-        logger.info("Merging chains")
-        chain = []
+        logger.info("Merging partial chain")
+
         # Reconstruct the partial chain
+        partial_chain = []
         for block_repr in chain_repr:
             block_vars = create_block_from_list(block_repr)
-            chain.append(Block(*block_vars))
+            partial_chain.append(Block(*block_vars))
 
-        for block in chain:
-            block.reception = self.custom_timer.time()
-        # if chain[-1].total_difficulty < self.get_block('last').total_difficulty:
-        #     return
-
-        if not self.verify_chain(chain):
+        # Validate the partial chain
+        if partial_chain[-1].total_difficulty < self.get_block('last').total_difficulty:
+            logger.warning("Received a lower difficulty chain")
+            print("Received a lower difficulty chain")
             return
 
-        if chain[0].parent_hash == self.get_block(height).hash:
-            # update mempool
-            for block in chain:
+        elif not self.verify_chain(partial_chain):
+            logger.warning("Received an invalid chain")
+            print("Received an invalid chain")
+            return
+
+        elif partial_chain[0].parent_hash != self.get_block(height).hash:
+            logger.warning("Received chain that does not fit")
+            print("Received chain that does not fit")
+            return
+
+        # Insert the partial chain
+        else:
+
+            for block in partial_chain:
+                block.reception = self.custom_timer.time()
+
+            # Retrieve transactions on discarded blocks
+            for block in self.chain[height+1:]:
+                for transaction in block.data:
+                    self.add_to_mempool(transaction)
+                    self.previous_transactions_id.remove(transaction.id)
+
+            # Remove transactions on partial chain from mempool
+            for block in partial_chain:
                 for transaction in block.data:
                     self.mempool.pop(transaction.id, None)
                     self.previous_transactions_id.add(transaction.id)
 
-            # retrieving possible missed transactions
-            for block in self.chain[height+1:]:
-                for transaction in block.data:
-                    if transaction.id not in self.previous_transactions_id:
-                        self.add_to_mempool(transaction)
-
-            # Replace self chain with the other chain
             del self.chain[height+1:]
-            self.chain.extend(chain)
-            logger.info(f"Node {self.id} has updated its chain, total difficulty : {self.get_block('last').total_difficulty}, n = {chain[-1].state.state_variables.get('n')}")
+            self.chain.extend(partial_chain)
+            logger.info(f"Node {self.id} has updated its chain, total difficulty : {self.get_block('last').total_difficulty}, n = {partial_chain[-1].state.state_variables.get('n')}")
             for block in self.chain[-5:]:
                 logger.info(f"{block.__repr__()}   ##{len(block.data)}##  {block.state.state_variables}")
-        else:
-            logger.info("Chain does not fit here")
+
+
 
     def add_peer(self, enode):
         # if len(self.peers) > 5:
@@ -256,6 +274,9 @@ class Node:
     def get_total_difficulty(self):
         return int(self.chain[-1].total_difficulty)
 
+    def get_sync_info(self):
+        return (self.get_block('last').get_header_hash(), self.get_block('last').total_difficulty)
+    
     def mempool_hash(self, astype = None, digest_size = 1):
         # Step 1: Convert each transaction to a serialized JSON string
         serialized_mempool = [json.dumps(txn, sort_keys=True) for txn in self.mempool]
@@ -274,11 +295,28 @@ class Node:
             return int.from_bytes(blake2s_hash.digest(), 'big')
         return blake2s_hash
 
+    def last_hash(self, astype = None, digest_size = 1):
+        # Step 1: Hash the last block hash string using SHA-256
+        blake2s_hash = hashlib.blake2s(self.chain[-1].hash.encode(), digest_size=digest_size)
+        if astype == 'string' or astype == 'str' or astype == str:
+            return blake2s_hash.hexdigest()
+        if astype == 'integer' or astype == 'int' or astype == int:
+            return int.from_bytes(blake2s_hash.digest(), 'big')
+        return blake2s_hash
+
     @property  
     def key(self):
         return self.id
     
+    # @property  
+    # def previous_transactions_id(self):
+    #     return set([])
+
+    @property  
+    def current_height(self):
+        return len(self.chain)
+
     def gen_enode(self, id, host = '127.0.0.1', port = 0):
         if port == 0:
-            port = 1233 + id
+            port = 1233 + int(id)
         return f"enode://{id}@{host}:{port}"

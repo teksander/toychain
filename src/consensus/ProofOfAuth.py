@@ -14,7 +14,7 @@ logger = logging.getLogger('poa')
 BLOCK_PERIOD = 100
 DIFF_NOTURN = 1
 DIFF_INTURN = 2
-DELAY_NOTURN = None
+DELAY_NOTURN = 5
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]
@@ -71,7 +71,7 @@ class ProofOfAuthority:
     def verify_block(self, block, previous_state):
         # Verify signer
         if block.miner_id in self.auth_signers:
-            signer_index = self.auth_signers.index(block.miner_id)
+            signer_index = self.auth_signers.index(block.miner_id)+1
         else:
             return False
 
@@ -118,7 +118,7 @@ class ProofOfAuth():
 
         self.index = -1
         if self.node.enode in self.auth_signers:
-            self.index = self.auth_signers.index(self.node.enode)
+            self.index = self.auth_signers.index(self.node.enode)+1
         else:
             print(f"Node {self.node.id} not allowed to produce blocks")
             
@@ -138,15 +138,21 @@ class ProofOfAuth():
             return
 
         # If it is my turn to sign (diff = DIFF_INTURN)
+        blocks_until_my_turn = (self.index-next_block_number % self.signer_count) % self.signer_count
+
         if next_block_number % self.signer_count == self.index:
             difficulty = DIFF_INTURN
-
+        
         # If it is not my turn, wait (t = DELAY_NOTURN)
-        elif DELAY_NOTURN == None or timestamp-last_block.timestamp-self.period < DELAY_NOTURN:
+        elif not DELAY_NOTURN:
+            return
+        
+        elif timestamp-last_block.timestamp-self.period < DELAY_NOTURN*blocks_until_my_turn:
             return
         
         # After wait, do out of turn signature (diff = DIFF_NOTURN)
         else:
+            print(f"Im {self.node.id} proposing out of turn")
             difficulty = DIFF_NOTURN
         
         if next_block_number > last_block.height and timestamp > (last_block.timestamp + self.period - 1):
