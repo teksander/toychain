@@ -14,7 +14,7 @@ logger = logging.getLogger('poa')
 BLOCK_PERIOD = 100
 DIFF_NOTURN = 1
 DIFF_INTURN = 2
-DELAY_NOTURN = 5
+DELAY_NOTURN = 25
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]
@@ -152,7 +152,7 @@ class ProofOfAuth():
         
         # After wait, do out of turn signature (diff = DIFF_NOTURN)
         else:
-            print(f"Im {self.node.id} proposing out of turn")
+            logger.info(f"Robot {self.node.id} proposing out of turn")
             difficulty = DIFF_NOTURN
         
         if next_block_number > last_block.height and timestamp > (last_block.timestamp + self.period - 1):

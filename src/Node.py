@@ -61,10 +61,10 @@ class Node:
         self.chain_sync_thread.step()
         self.mining_thread.step()
 
-        # Temporary test, should be removed soon:
-        all_tx_ids = set([tx.id for tx in self.get_all_transactions()])
-        if all_tx_ids != self.previous_transactions_id:
-            print("Some problem with previous transactions set")
+        # # Temporary test, should be removed soon:
+        # all_tx_ids = set([tx.id for tx in self.get_all_transactions()])
+        # if all_tx_ids != self.previous_transactions_id:
+        #     print("Some problem with previous transactions set")
     
     def start(self):
         self.start_mining()
