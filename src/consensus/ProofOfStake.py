@@ -1,17 +1,16 @@
 import copy
 import threading
-from random import random
+import random 
 
 
 from toychain.src.Block import Block, State
 
 import logging
 
-from utils.helpers import compute_hash
 logger = logging.getLogger('pos')
 
 # Parameters for Proof-of-Stake
-BLOCK_PERIOD = 100
+BLOCK_PERIOD = 10
 
 # Default genesis block when argument is not passed when creating node
 GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State())
@@ -30,14 +29,20 @@ class ProofOfStake:
 
     def verify_chain(self, chain, previous_state):
         last_block = chain[0]
-        if not self.verify_block(last_block, last_block):
+        if not self.verify_block(last_block, previous_state):
             return False
+
         i = 1
         while i < len(chain):
             last_block_hash = last_block.compute_block_hash()
-
+            # Verify signer was designated to forge the block
+            designated_forger = self.get_forger(last_block, chain[i].timestamp)
+            if not designated_forger or chain[i].miner_id != designated_forger:
+                logger.error(f"Invalid signer {chain[i].miner_id} instead of {designated_forger}")
+                return False
+            
             # Check the block
-            if not self.verify_block(chain[i], last_block):
+            if not self.verify_block(chain[i], last_block.state):
                 logger.error("Block error")
                 logger.error(chain[i].__repr__())
                 return False
@@ -52,20 +57,15 @@ class ProofOfStake:
             i += 1
         return True
 
-    def verify_block(self, block, previous_block):
-        # Verify signer was designated to forge the block
-        designated_forger = self.get_forger(previous_block, block.timestamp)
-        if not designated_forger or block.signer != designated_forger:
-            logger.error("Invalid signer")
-            return False
-
+    def verify_block(self, block, previous_state):
+        
         # Verify block state
         if not self.trust:
-            s = copy.deepcopy(previous_block.state)
+            s = copy.deepcopy(previous_state)
             for transaction in block.data:
                 s.apply_transaction(transaction)
             if s.state_hash != block.state.state_hash:
-                logger.error(f"Invalid state {previous_block.state.state_variables}")
+                logger.error(f"Invalid state {previous_state.state_variables}")
                 logger.error(f"{s.state_variables}")
                 logger.error(f"{block.state.state_variables}")
                 logger.error(f"{block.data}")
@@ -119,7 +119,7 @@ class VirtualProofOfStake():
         """
         last_block = copy.deepcopy(self.node.get_block('last'))
         next_block_number = last_block.height+1 
-        timestamp = self.timer.get_time()
+        timestamp = self.timer.time()
         
         forger = self.node.consensus.get_forger(last_block, timestamp)
         
