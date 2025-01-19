@@ -39,6 +39,13 @@ The consensus options are contained in their own file
 The __genesis block__ is organised this way:
 
 - miner_id contains the authorised signers list
+
+##### Proof of stake
+
+``BLOCK_PERIOD``: Minimum difference between two consecutive block’s timestamps.
+
+``ProofOfAuth.trust``: Determines if the state should be checked or not when verifying a chain
+
 ### Other options
 All the other options are contained in the ``constants.py`` file.
 
