@@ -82,7 +82,7 @@ class ProofOfStake:
         lottery = previous_block.state.state_variables['lottery']
         
         # make sure chains with the same state choose the same  
-        random.seed(previous_block.state.state_hash)
+        random.seed(previous_block.hash)
         
         # Calculate the number of missed blocks
         time_difference = timestamp - previous_block.timestamp
@@ -234,4 +234,6 @@ class proofOfStakeThread(threading.Thread):
                 logger.info(f"Block produced by Node {self.node.id}: ")
                 logger.info(f"{repr(block)}")
                 logger.info(f"###{block.state.state_variables}### \n")
+        
+    def stop(self):
         self.flag.set()
