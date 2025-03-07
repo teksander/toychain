@@ -4,6 +4,8 @@ import random
 
 
 from toychain.src.Block import Block, State
+from toychain.src.utils.helpers import gen_enode, enode_to_id
+from toychain.src.Transaction import Transaction
 
 import logging
 
@@ -13,16 +15,20 @@ logger = logging.getLogger('pos')
 BLOCK_PERIOD = 10
 
 # Default genesis block when argument is not passed when creating node
-GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State())
+auth_signers = [gen_enode(i) for i in range(1,26)]
+GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State({'lottery': auth_signers}))
 
 class ProofOfStake:
     """
-    Consensus protocol based on https://eips.ethereum.org/EIPS/eip-225
+    Consensus protocol 
     """
 
     def __init__(self, genesis = GENESIS_BLOCK):
         self.genesis = genesis
         self.block_generation = VirtualProofOfStake
+        # genesis.state.state_variable must contain a 'lottery' list with valid enodes in it else no block will be produced.
+        if not self.genesis.state.state_variables.get('lottery'):
+            raise ValueError("Genesis block must have a 'lottery' state variable")
 
         # Boolean to check or not the block states
         self.trust = True
@@ -88,7 +94,7 @@ class ProofOfStake:
         time_difference = timestamp - previous_block.timestamp
         missed_blocks = time_difference // BLOCK_PERIOD
         
-        if missed_blocks == 0:
+        if missed_blocks < 1:
             return False
         
         # calculate the forger of the next block
@@ -117,33 +123,34 @@ class VirtualProofOfStake():
         Randomely choose a forger each BLOCK_PRIOD from the "lottery" (last block state variable) lots based on stake
         let him forge a new block
         """
-        last_block = copy.deepcopy(self.node.get_block('last'))
-        next_block_number = last_block.height+1 
+        node = self.node
+        last_block = copy.deepcopy(node.get_block('last'))
+        next_block_number = last_block.height + 1 
         timestamp = self.timer.time()
         
-        forger = self.node.consensus.get_forger(last_block, timestamp)
+        forger = node.consensus.get_forger(last_block, timestamp)
         
         # Still in the Block Period of last block
         if not forger:
             return
         
         # let only the designated forger forge the block
-        if self.node.enode == forger:
+        if node.enode == forger:
 
             # Get the current block, state and mempool
-            previous_block = copy.deepcopy(self.node.get_block('last'))
+            previous_block = copy.deepcopy(node.get_block('last'))
             previous_state = previous_block.state
-            mempool = list((self.node.mempool.copy().values()))
+            mempool = list((node.mempool.copy().values()))
 
             # Filter out transactions already on the blockchain
-            data = [tx for tx in mempool if tx.id not in self.node.previous_transactions_id]
+            data = [tx for tx in mempool if tx.id not in node.previous_transactions_id]
             
             # Generate the new block
             block = Block(
                         next_block_number, 
                         previous_block.hash, 
                         data,
-                        self.node.enode,
+                        node.enode,
                         timestamp, 
                         1, 
                         previous_block.total_difficulty, 
@@ -152,13 +159,17 @@ class VirtualProofOfStake():
             # Apply transactions to obtain the new state variables
             for transaction in block.data:
                 block.state.apply_transaction(transaction, block)
+            
+            # Genrateblock reward for last block (except genesis block)    
+            if block.height > 1:
+                block.state.payout_block_reward(previous_block)
 
             # Update the blockchain and mempool
-            self.node.chain.append(block)
-            self.node.previous_transactions_id.update([tx.id for tx in block.data])
-            self.node.mempool.clear()
+            node.chain.append(block)
+            node.previous_transactions_id.update([tx.id for tx in block.data])
+            node.mempool.clear()
 
-            logger.info(f"Block produced by Node {self.node.id}: ")
+            logger.info(f"Block produced by Node {node.id}: ")
             logger.info(f"{repr(block)}")
             logger.info(f"{block.state.state_variables} \n")
 
@@ -225,6 +236,10 @@ class proofOfStakeThread(threading.Thread):
                 # Apply transactions to obtain the new state variables
                 for transaction in block.data:
                     block.state.apply_transaction(transaction, block)
+                
+                # Genrateblock reward for last block (except genesis block)    
+                if block.height > 1:
+                    block.state.payout_block_reward(previous_block)
 
                 # Update the blockchain and mempool
                 self.node.chain.append(block)

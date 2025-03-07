@@ -128,6 +128,10 @@ class VirtualMining():
         # Apply transactions to obtain the new state variables
         for transaction in block.data:
             block.state.apply_transaction(transaction, block)
+            
+        # Genrateblock reward for last block (except genesis block)    
+        if block.height > 1:
+            block.state.payout_block_reward(previous_block)
 
         # Update the blockchain and mempool
         self.node.chain.append(block)
@@ -215,6 +219,10 @@ class Mining():
         # Apply transactions to obtain the new state variables
         for transaction in block.data:
             block.state.apply_transaction(transaction, block)
+        
+        # Genrateblock reward for last block (except genesis block)    
+        if block.height > 1:
+            block.state.payout_block_reward(previous_block)
 
         attempt = 0
         while attempt < 10:

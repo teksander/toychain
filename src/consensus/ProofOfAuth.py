@@ -179,6 +179,10 @@ class ProofOfAuth():
             # Apply transactions to obtain the new state variables
             for transaction in block.data:
                 block.state.apply_transaction(transaction, block)
+                
+            # Genrateblock reward for last block (except genesis block)    
+            if block.height > 1:
+                block.state.payout_block_reward(previous_block)
 
             # Update the blockchain and mempool
             self.node.chain.append(block)
@@ -252,6 +256,10 @@ class ProofOfAuthThread(threading.Thread):
 
                 for transaction in block.data:
                     block.state.apply_transaction(transaction, block)
+                
+                # Genrateblock reward for last block (except genesis block)    
+                if block.height > 1:
+                    block.state.payout_block_reward(previous_block)
 
                 self.node.chain.append(block)
                 self.node.mempool.clear()

@@ -76,3 +76,6 @@ def gen_enode(id, host = '127.0.0.1', port = 0):
     if port == 0:
         port = 1233 + id
     return f"enode://{id}@{host}:{port}"
+
+def enode_to_id(enode):
+    return int(enode.split('@')[0].split('//')[1])
