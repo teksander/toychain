@@ -46,6 +46,9 @@ class Node:
         self.syncing = False
         self.mining = False
         self.mining_thread = consensus.block_generation(self)
+
+        # For visualization only
+        self.produced_block = ""
     
 
     @property
@@ -277,6 +280,11 @@ class Node:
     def get_sync_info(self):
         return (self.get_block('last').get_header_hash(), self.get_block('last').total_difficulty)
     
+    def get_produced_block(self):
+        t = self.produced_block
+        self.produced_block = ""
+        return t
+
     def mempool_hash(self, astype = None, digest_size = 1):
         # Step 1: Convert each transaction to a serialized JSON string
         serialized_mempool = [json.dumps(txn, sort_keys=True) for txn in self.mempool]

@@ -1,4 +1,5 @@
 from random import randint
+import json 
 
 from toychain.src.utils.helpers import compute_hash, transaction_to_dict
 from toychain.scs.deploy import Contract as State
@@ -69,3 +70,19 @@ class Block:
         Translate the block object in a string object
         """
         return f"## H: {self.height}, D: {self.difficulty}, TD: {self.total_difficulty}, P: {self.miner_id}, BH: {self.hash[0:5]}, TS:{self.timestamp}, #T:{len(self.data)}, SH:{self.state.state_hash[0:5]}##"
+
+    def to_json(self):
+        return {
+            "Height": self.height,
+            "ParentHash": self.parent_hash,
+            "Transactions": len(self.data), 
+            "Miner": self.miner_id,
+            "Timestamp": self.timestamp,
+            "Difficulty": self.difficulty,
+            "TotalDifficulty": self.total_difficulty,
+            "BlockHash": self.hash,
+            "StateHash": self.state.state_hash if self.state else None
+        }
+
+    def to_json_string(self):
+        return json.dumps(self.to_json(), indent=4)
