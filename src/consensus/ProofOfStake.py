@@ -1,13 +1,9 @@
 import copy
 import threading
 import random 
-
-
-from toychain.src.Block import Block, State
-from toychain.src.utils.helpers import gen_enode, enode_to_id
-from toychain.src.Transaction import Transaction
-
 import logging
+from toychain.src.Block import Block, State
+from toychain.src.utils.helpers import gen_enode
 
 logger = logging.getLogger('pos')
 
@@ -20,7 +16,7 @@ GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State({'lotter
 
 class ProofOfStake:
     """
-    Consensus protocol 
+    Consensus protocol based on https://eips.ethereum.org/EIPS/eip-225
     """
 
     def __init__(self, genesis = GENESIS_BLOCK):
