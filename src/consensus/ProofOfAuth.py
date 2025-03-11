@@ -186,6 +186,7 @@ class ProofOfAuth():
 
             # Update the blockchain and mempool
             self.node.chain.append(block)
+            self.node.produced_block = block.to_json_string()
             self.node.previous_transactions_id.update([tx.id for tx in block.data])
             self.node.mempool.clear()
 
