@@ -1,4 +1,4 @@
-from toychain.src.utils.helpers import compute_hash
+from toychain.src.utils.helpers import compute_hash,enode_to_id
 
 import logging
 logger = logging.getLogger('sc')
@@ -56,3 +56,16 @@ class StateMixin:
                 function(*inputs)
             except Exception as e:
                 raise e
+    
+    def payout_block_reward(self,block):
+        # Check if the block reward is defined
+        if not hasattr(self, 'get_block_reward'):
+            return
+        
+        node_id = str(enode_to_id(block.miner_id))
+        # Initialize funds of unused addresses
+        self.balances.setdefault(node_id, 0)
+        # Apply the block reward
+        self.balances[node_id] += self.get_block_reward(block)
+        # Increment the transaction counter
+        self.n += 1
