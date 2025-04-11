@@ -69,3 +69,9 @@ class StateMixin:
         self.balances[node_id] += self.get_block_reward(block)
         # Increment the transaction counter
         self.n += 1
+
+class Ledger(StateMixin):
+
+    def __init__(self):
+        self.n           = 0
+        self.balances    = {}

@@ -155,7 +155,8 @@ class Node:
         partial_chain = []
         for block_repr in chain_repr:
             block_vars = create_block_from_list(block_repr)
-            partial_chain.append(Block(*block_vars))
+            state_copy = type(self.consensus.genesis.state)(block_vars[-1])
+            partial_chain.append(Block(*block_vars[0:-1], state_copy))
 
         # Validate the partial chain
         if partial_chain[-1].total_difficulty < self.get_block('last').total_difficulty:

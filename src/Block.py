@@ -2,7 +2,6 @@ from random import randint
 import json 
 
 from toychain.src.utils.helpers import compute_hash, transaction_to_dict
-from toychain.scs.deploy import Contract as State
 
 import logging
 logger = logging.getLogger('block')
@@ -12,28 +11,25 @@ class Block:
     Class representing a block of a blockchain containing transactions
     """
 
-    def __init__(self, height, parent_hash, data, miner_id, timestamp, difficulty, total_diff, nonce=None,
-                 state_var=None, state = None):
+    def __init__(self, height, parent_hash, data, miner_id, timestamp, difficulty, total_diff, nonce = None, state = None):
         self.height = height
         self.number = height
         self.parent_hash = parent_hash
         self.data = data
         self.miner_id = miner_id
         self.timestamp = timestamp
-        self.reception = 0
         self.difficulty = difficulty
         self.total_difficulty = total_diff + difficulty
+        self.nonce = nonce
 
         if state:
             self.state = state
-        else:
-            self.state = State(state_var)
 
-        self.nonce = nonce
         if nonce is None:
             self.nonce = randint(0, 1000)
 
         self.transactions_root = self.transactions_hash()
+        self.reception = 0
         self.hash = self.compute_block_hash()
 
     def compute_block_hash(self):

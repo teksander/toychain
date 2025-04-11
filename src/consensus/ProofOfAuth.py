@@ -5,7 +5,8 @@ from time import time, sleep
 
 from toychain.src.utils import constants
 from toychain.src.utils.helpers import gen_enode
-from toychain.src.Block import Block, State
+from toychain.src.Block import Block
+from toychain.src.State import Ledger
 
 import logging
 logger = logging.getLogger('poa')
@@ -18,7 +19,7 @@ DELAY_NOTURN = 25
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]
-GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = State())
+GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = Ledger())
 
 class ProofOfAuthority:
     """
@@ -180,7 +181,7 @@ class ProofOfAuth():
             for transaction in block.data:
                 block.state.apply_transaction(transaction, block)
                 
-            # Genrateblock reward for last block (except genesis block)    
+            # Generate block reward for last block (except genesis block)    
             if block.height > 1:
                 block.state.payout_block_reward(previous_block)
 
