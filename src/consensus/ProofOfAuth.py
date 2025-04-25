@@ -125,7 +125,9 @@ class ProofOfAuth():
             
     def run(self):
 
-        if self.index == -1: self.stop()
+        if self.index == -1: 
+            self.stop()
+            return
 
         timestamp = self.timer.time()
         last_block = copy.deepcopy(self.node.get_block('last'))

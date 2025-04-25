@@ -1,9 +1,10 @@
 import urllib.parse, hashlib, json
 
+from toychain.src.Block import Block
 from toychain.src.connections.NodeServerThread import NodeServerThread
 from toychain.src.connections.Pingers import ChainPinger, MemPoolPinger
 from toychain.src.utils.helpers import CustomTimer, create_block_from_list
-from toychain.src.Block import Block
+from toychain.src.utils.explorer import BlockchainGUI
 
 import logging
 logger = logging.getLogger('w3')
@@ -29,6 +30,7 @@ class Node:
         self.enode = f"enode://{self.id}@{self.host}:{self.port}"
 
         self.consensus = consensus
+
         # Initialize the genesis Block
         self.chain.append(self.consensus.genesis)
 
@@ -49,6 +51,7 @@ class Node:
 
         # For visualization only
         self.produced_block = ""
+        self.explorer = None
     
 
     @property
@@ -63,6 +66,11 @@ class Node:
         self.mempool_sync_thread.step()
         self.chain_sync_thread.step()
         self.mining_thread.step()
+
+        if self.explorer:
+            self.explorer.send_blocks([block.to_json_string() for block in self.chain])
+            self.explorer.send_transactions(list(self.mempool.values()))
+            self.explorer.display_state(self.chain[-1].state)
 
         # # Temporary test, should be removed soon:
         # all_tx_ids = set([tx.id for tx in self.get_all_transactions()])
@@ -199,12 +207,11 @@ class Node:
                 logger.info(f"{block.__repr__()}   ##{len(block.data)}##  {block.state.state_variables}")
 
 
-
     def add_peer(self, enode):
-        # if len(self.peers) > 5:
-        #     print('max peers reached')
-        #     return False
-        
+
+        if isinstance(enode, int) or enode.isdigit():
+            enode = gen_enode(enode)
+
         if enode in self.peers:
             return False
 
@@ -213,6 +220,11 @@ class Node:
         node_info = {"id": parsed_enode.username, "host": parsed_enode.hostname, "port": parsed_enode.port, "enode": enode}
         self.peers[enode] = node_info
         return True
+
+    def add_peers(self, enodes):
+
+        for enode in enodes:
+            self.add_peer(enode)
 
     def remove_peer(self, enode):
         if self.peers.pop(enode, None):
@@ -245,13 +257,12 @@ class Node:
                         return t
         return transaction
 
-    def get_transaction_receipt(self, transaction_id):
+    def get_transaction_receipt(self, transaction):
         """
         returns whether the specified transaction is in the chain
         """
-        if transaction_id in self.previous_transactions_id:
-            return True
-        return False
+        transaction_id = getattr(transaction, 'id', transaction)
+        return transaction_id in self.previous_transactions_id
 
     def get_all_transactions(self):
         """
@@ -313,6 +324,9 @@ class Node:
             return int.from_bytes(blake2s_hash.digest(), 'big')
         return blake2s_hash
 
+    def run_explorer(self):
+        self.explorer = BlockchainGUI()
+       
     @property  
     def key(self):
         return self.id
