@@ -72,6 +72,13 @@ class StateMixin:
 
 class Ledger(StateMixin):
 
-    def __init__(self):
-        self.n           = 0
-        self.balances    = {}
+    def __init__(self, state_variables = None):
+
+        if state_variables is not None:
+            for var, value in state_variables.items(): setattr(self, var, value)     
+
+        else:
+            # Init the basic state variables
+            self.private     = {}
+            self.n           = 0
+            self.balances    = {}

@@ -5,14 +5,15 @@ sys.path.append("/home/eksander/toychain-argos/")
 
 from toychain.src.Node import Node
 from toychain.src.consensus.ProofOfAuth import ProofOfAuthority
-from toychain.src.Block import Block, State
+from toychain.src.Block import Block
+from toychain.src.State import Ledger
 from toychain.src.Transaction import Transaction
-from toychain.src.constants import LOCALHOST
-from toychain.src.utils import gen_enode
+from toychain.src.utils.constants import LOCALHOST
+from toychain.src.utils.helpers import gen_enode
 
 
 auth_signers = [gen_enode(i) for i in range(1,4)]
-initial_state = State()
+initial_state = Ledger()
 
 GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = initial_state)
 CONSENSUS = ProofOfAuthority(genesis = GENESIS_BLOCK)
@@ -55,7 +56,6 @@ if __name__ == '__main__':
     step = 1
 
     while True:
-        print(curr_step)
         node1.step()
         node2.step()
         node3.step()
@@ -64,10 +64,10 @@ if __name__ == '__main__':
         if curr_step>max_steps:
             break
     
-    # Display the final blockchains at the end of the simulation
-    print('Node 1')
-    print(node1.display_chain())
-    print('Node 2')
-    print(node2.display_chain())
-    print('Node 3')
-    print(node3.display_chain())
+    # # Display the final blockchains at the end of the simulation
+    # print('Node 1')
+    # print(node1.display_chain())
+    # print('Node 2')
+    # print(node2.display_chain())
+    # print('Node 3')
+    # print(node3.display_chain())
