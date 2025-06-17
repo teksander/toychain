@@ -2,7 +2,8 @@ import copy
 import threading
 import random 
 import logging
-from toychain.src.Block import Block, State
+from toychain.src.Block import Block
+from toychain.src.State import Ledger as State
 from toychain.src.utils.helpers import gen_enode
 
 logger = logging.getLogger('pos')

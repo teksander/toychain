@@ -6,8 +6,8 @@ from time import time, sleep
 from toychain.src.utils import constants
 from toychain.src.utils.helpers import gen_enode
 
-from toychain.src.Block import Block, State
-
+from toychain.src.Block import Block
+from toychain.src.State import Ledger as State
 import logging
 logger = logging.getLogger('pow')
 
