@@ -28,6 +28,7 @@ class NodeServerThread(threading.Thread):
         self.terminate_flag = threading.Event()
 
         print("Node " + str(self.id) + " starting on port " + str(self.port))
+        print("---------------------------------")
 
     def run(self):
         """

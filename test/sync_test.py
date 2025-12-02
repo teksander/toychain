@@ -4,7 +4,7 @@ import sys
 sys.path.append("/home/eksander/toychain-argos/")
 
 from toychain.src.Node import Node
-from toychain.src.consensus.ProofOfAuth import ProofOfAuthority
+from toychain.src.consensus.ProofOfAuthority import ProofOfAuthority
 from toychain.src.Block import Block
 from toychain.src.State import Ledger
 from toychain.src.Transaction import Transaction

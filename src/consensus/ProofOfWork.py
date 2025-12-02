@@ -15,6 +15,7 @@ logger = logging.getLogger('pow')
 MINING_DIFFICULTY = 99900  
 DIFF_CAP = 100000
 ROBOT_HASHPOWER = 1
+BLOCK_PERIOD = 10
 
 # Default genesis block when argument is not passed when creating node
 GENESIS_BLOCK = Block(0, 0000, [], 0, 0, 0, 0, nonce = 1, state = State())
@@ -105,7 +106,6 @@ class VirtualMining():
             return
 
         # I won the mining lottery 
-        print('CREATED A BLOCK')
         timestamp = self.timer.time()      
         previous_block = copy.deepcopy(self.node.get_block('last'))
         previous_state = previous_block.state

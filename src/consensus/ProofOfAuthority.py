@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger('poa')
 
 # Parameters for Proof-of-Authority
-BLOCK_PERIOD = 100
+BLOCK_PERIOD = 10
 DIFF_NOTURN = 1
 DIFF_INTURN = 2
 DELAY_NOTURN = 25
