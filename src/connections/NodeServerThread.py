@@ -1,4 +1,3 @@
-from ast import If
 import pickle
 import threading
 import socket
@@ -6,6 +5,7 @@ import urllib.parse
 from time import sleep
 # for sending/receiving with length prefix
 import struct 
+
 from toychain.src.connections.MessageHandler import MessageHandler
 
 # Use Length-Prefixed Protocol to avoid truncation issues
