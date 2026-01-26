@@ -44,6 +44,12 @@ class ProofOfConnection:
                 logger.error(f"Invalid signer {chain[i].miner_id} instead of {designated_forger}")
                 return False
             
+            # Verify the difficulty
+            expected_difficulty = self.get_difficulty(last_block, chain[i].timestamp)
+            if chain[i].difficulty != expected_difficulty:
+                logger.error(f"Invalid difficulty {chain[i].difficulty} instead of {expected_difficulty}")
+                return False
+            
             # Check the block
             if not self.verify_block(chain[i], last_block.state):
                 logger.error("Block error")
@@ -83,14 +89,42 @@ class ProofOfConnection:
         """
         # connectivity = lots of the nodes 
         connectivity = previous_block.state.state_variables['connectivity']
-
-        # get the key with the highest value if mtuliple keys have the same value choose randomly among them
-        max_connectivity = max(connectivity.values())
-        candidates = [key for key, value in connectivity.items() if value == max_connectivity]
+        # change the dict into a list of tuples for shuffling and sorting
+        connectivity = list(connectivity.items())
+        # make sure chains with the same state choose the same shuffle 
         random.seed(previous_block.hash)
-        forger = random.choice(candidates) if candidates else None
+        # shuffle to prevent stable sorting order for nodes with same connectivity
+        random.shuffle(connectivity)
+        # sort connectivity dict by descending connectivity value
+        connectivity.sort(key=lambda item: item[1], reverse=True)
         
+        # Calculate the number of missed blocks
+        time_difference = timestamp - previous_block.timestamp
+        missed_blocks = time_difference // BLOCK_PERIOD
+        
+        # its not time to forge a new block yet
+        if missed_blocks < 1:
+            return False
+
+        # calculate the forger of the next block
+        forger = connectivity[missed_blocks % len(connectivity)][0]
+         
         return forger
+    
+    def get_difficulty(self, previous_block, timestamp):
+        # Calculate the number of missed blocks
+        time_difference = timestamp - previous_block.timestamp
+        missed_blocks = time_difference // BLOCK_PERIOD
+        
+        # was not not time to forge a new block yet
+        if missed_blocks < 1:
+            return 0
+        
+        # difficulty deceases with number of missed blocks
+        difficulty = len(previous_block.state.state_variables['connectivity']) - missed_blocks + 1
+        
+        # return non-negative difficulty
+        return difficulty if difficulty > 0 else 0
         
 class VirtualProofOfConnection():
     """
@@ -109,8 +143,7 @@ class VirtualProofOfConnection():
             
     def run(self):
         """"
-        Randomely choose a forger each BLOCK_PRIOD from the "connectivity" (last block state variable) lots based on stake
-        let him forge a new block
+        choose the best connected aviable node as a forger each BLOCK_PERIOD. Let him forge a new block
         """
         node = self.node
         last_block = copy.deepcopy(node.get_block('last'))
@@ -130,6 +163,8 @@ class VirtualProofOfConnection():
             previous_block = copy.deepcopy(node.get_block('last'))
             previous_state = previous_block.state
             mempool = list((node.mempool.copy().values()))
+            # calculate the difficulty
+            difficulty = node.consensus.get_difficulty(last_block, timestamp)
 
             # Filter out transactions already on the blockchain
             data = [tx for tx in mempool if tx.id not in node.previous_transactions_id]
@@ -141,7 +176,7 @@ class VirtualProofOfConnection():
                         data,
                         node.enode,
                         timestamp, 
-                        1, 
+                        difficulty, 
                         previous_block.total_difficulty, 
                         state = previous_state)
 

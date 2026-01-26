@@ -43,6 +43,12 @@ class ProofOfStake:
             if not designated_forger or chain[i].miner_id != designated_forger:
                 logger.error(f"Invalid signer {chain[i].miner_id} instead of {designated_forger}")
                 return False
+
+            # Verify the difficulty
+            expected_difficulty = self.get_difficulty(last_block, chain[i].timestamp)
+            if chain[i].difficulty != expected_difficulty:
+                logger.error(f"Invalid difficulty {chain[i].difficulty} instead of {expected_difficulty}")
+                return False
             
             # Check the block
             if not self.verify_block(chain[i], last_block.state):
@@ -99,6 +105,18 @@ class ProofOfStake:
             forger = random.choice(lottery)
         
         return forger
+    
+    def get_difficulty(self, previous_block, timestamp):
+        # Calculate the number of missed blocks
+        time_difference = timestamp - previous_block.timestamp
+        missed_blocks = time_difference // BLOCK_PERIOD
+        
+        # was not not time to forge a new block yet
+        if missed_blocks < 1:
+            return 0
+        
+        # fixed difficulty for PoS
+        return 1
         
 class VirtualProofOfStake():
     """
@@ -126,6 +144,7 @@ class VirtualProofOfStake():
         timestamp = self.timer.time()
         
         forger = node.consensus.get_forger(last_block, timestamp)
+        difficulty = node.consensus.get_difficulty(last_block, timestamp)
         
         # Still in the Block Period of last block
         if not forger:
@@ -149,7 +168,7 @@ class VirtualProofOfStake():
                         data,
                         node.enode,
                         timestamp, 
-                        1, 
+                        difficulty, 
                         previous_block.total_difficulty, 
                         state = previous_state)
 
