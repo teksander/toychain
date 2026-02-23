@@ -6,10 +6,11 @@ from toychain.src.Block import Block
 from toychain.src.State import Ledger as State
 from toychain.src.utils.helpers import gen_enode
 
-logger = logging.getLogger('pos')
+logger = logging.getLogger('poc')
 
 # Parameters for Proof-of-Connection
 BLOCK_PERIOD = 10
+DELAY_NOTURN = 25
 
 # Default genesis block when argument is not passed when creating node
 auth_signers = [gen_enode(i) for i in range(1,26)]
@@ -38,20 +39,17 @@ class ProofOfConnection:
         i = 1
         while i < len(chain):
             last_block_hash = last_block.compute_block_hash()
-            # Verify signer was designated to forge the block
-            designated_forger = self.get_forger(last_block, chain[i].timestamp)
-            if not designated_forger or chain[i].miner_id != designated_forger:
-                logger.error(f"Invalid signer {chain[i].miner_id} instead of {designated_forger}")
+            
+            # Check Timestamp difference
+            if chain[i].timestamp - last_block.timestamp < BLOCK_PERIOD // 2:
+                logger.error("Timestamp error in the blockchain")
+                logger.error(len(chain))
+                logger.error(f"Previous: {last_block.timestamp}, Current: {chain[i].timestamp}")
+                logger.error(chain)
                 return False
             
-            # Verify the difficulty
-            expected_difficulty = self.get_difficulty(last_block, chain[i].timestamp)
-            if chain[i].difficulty != expected_difficulty:
-                logger.error(f"Invalid difficulty {chain[i].difficulty} instead of {expected_difficulty}")
-                return False
-            
-            # Check the block
-            if not self.verify_block(chain[i], last_block.state):
+            # Check the block (includes signer and difficulty verification)
+            elif not self.verify_block(chain[i], last_block.state, last_block):
                 logger.error("Block error")
                 logger.error(chain[i].__repr__())
                 return False
@@ -66,7 +64,20 @@ class ProofOfConnection:
             i += 1
         return True
 
-    def verify_block(self, block, previous_state):
+    def verify_block(self, block, previous_state, last_block=None):
+        
+        # Verify signer was designated to forge the block
+        if last_block is not None:
+            designated_forger = self.get_forger(last_block, block.timestamp)
+            if not (block.miner_id == designated_forger or designated_forger == True):
+                logger.error(f"Invalid signer {block.miner_id} instead of {designated_forger}")
+                return False
+            
+            # Verify the difficulty
+            expected_difficulty = self.get_difficulty(last_block, block.miner_id)
+            if block.difficulty != expected_difficulty:
+                logger.error(f"Invalid difficulty {block.difficulty} instead of {expected_difficulty}")
+                return False
         
         # Verify block state
         if not self.trust:
@@ -84,9 +95,18 @@ class ProofOfConnection:
         
     def get_forger(self, previous_block, timestamp):
         """
-        Randomely choose a forger each BLOCK_PRIOD from the "lottery" (last block state variable) lots based on stake
-        let him forge a new block
+        choose the best connected aviable node as a forger each BLOCK_PERIOD. Let him forge a new block
+        if the DELAY_NOTURN time has passed, let any node forge the block
+        
+        returns False (no forger), True (any node can forge) or the enode of the designated forger
         """
+        # Calculate the number of missed blocks
+        time_difference = timestamp - previous_block.timestamp
+        
+        # its not time to forge a new block yet
+        if time_difference < BLOCK_PERIOD:
+            return False
+        
         # connectivity = lots of the nodes 
         connectivity = previous_block.state.state_variables['connectivity']
         # change the dict into a list of tuples for shuffling and sorting
@@ -97,34 +117,23 @@ class ProofOfConnection:
         random.shuffle(connectivity)
         # sort connectivity dict by descending connectivity value
         connectivity.sort(key=lambda item: item[1], reverse=True)
+            
+        # the preferred forger gets to forge the block
+        if time_difference < DELAY_NOTURN:
+            # calculate the forger of the next block
+            return connectivity[0][0]
         
-        # Calculate the number of missed blocks
-        time_difference = timestamp - previous_block.timestamp
-        missed_blocks = time_difference // BLOCK_PERIOD
-        
-        # its not time to forge a new block yet
-        if missed_blocks < 1:
-            return False
-
-        # calculate the forger of the next block
-        forger = connectivity[missed_blocks % len(connectivity)][0]
-         
-        return forger
+        # the preferred forger missed his chance, the next best connected node gets to forge the block
+        if time_difference >= DELAY_NOTURN:
+            return True
     
-    def get_difficulty(self, previous_block, timestamp):
-        # Calculate the number of missed blocks
-        time_difference = timestamp - previous_block.timestamp
-        missed_blocks = time_difference // BLOCK_PERIOD
-        
-        # was not not time to forge a new block yet
-        if missed_blocks < 1:
-            return 0
-        
-        # difficulty deceases with number of missed blocks
-        difficulty = len(previous_block.state.state_variables['connectivity']) - missed_blocks + 1
-        
-        # return non-negative difficulty
-        return difficulty if difficulty > 0 else 0
+    def get_difficulty(self, previous_block, enode):
+        """
+        return the connectivity of the forger as difficulty
+        """
+        connectivity = previous_block.state.state_variables['connectivity'] 
+        # Return False if enode is not in the connectivity dictionary (e.g., when forger == True and any node can forge)
+        return connectivity.get(enode,-1)+1
         
 class VirtualProofOfConnection():
     """
@@ -153,19 +162,34 @@ class VirtualProofOfConnection():
         forger = node.consensus.get_forger(last_block, timestamp)
         
         # Still in the Block Period of last block
-        if not forger:
+        if forger is False:
             return
         
-        # let only the designated forger forge the block
-        if node.enode == forger:
+        # No signing if already signed in last N/2+1 blocks
+        connectivity = last_block.state.state_variables['connectivity']
+        signer_count = len(connectivity)
+        last_signed_block = node.get_last_signed_block()
+            
+        if last_signed_block == 0:
+            pass
+        elif next_block_number - last_signed_block < (signer_count + 1) // 2 + (signer_count + 1) % 2:
+            return
+        
+        # let only the designated forger forge the block or if the designated forger missed his chance, let any node forge the block
+        if node.enode == forger or forger == True:
+            
+            # calculate the difficulty
+            difficulty = node.consensus.get_difficulty(last_block,node.enode)
+            # check if there is a connectivity value for the node in the state variables, if not the node is not allowed to forge a block
+            if difficulty == 0:
+                #logger.error(f"Node {node.id} is not allowed to forge a block")
+                return
 
             # Get the current block, state and mempool
             previous_block = copy.deepcopy(node.get_block('last'))
             previous_state = previous_block.state
             mempool = list((node.mempool.copy().values()))
-            # calculate the difficulty
-            difficulty = node.consensus.get_difficulty(last_block, timestamp)
-
+            
             # Filter out transactions already on the blockchain
             data = [tx for tx in mempool if tx.id not in node.previous_transactions_id]
             
