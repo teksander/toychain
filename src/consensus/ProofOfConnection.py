@@ -66,12 +66,34 @@ class ProofOfConnection:
 
     def verify_block(self, block, previous_state, last_block=None):
         
-        # Verify signer was designated to forge the block
+        # Verify signer was allowed to forge this block
         if last_block is not None:
-            designated_forger = self.get_forger(last_block, block.timestamp)
-            if not (block.miner_id == designated_forger or designated_forger == True):
-                logger.error(f"Invalid signer {block.miner_id} instead of {designated_forger}")
+            connectivity = last_block.state.state_variables.get('connectivity', {})
+            if block.miner_id not in connectivity:
+                logger.error(f"Invalid signer {block.miner_id} not in connectivity list")
                 return False
+            
+            # Get the connectivity ranking to determine forging order
+            connectivity_ranking = self.get_connectivity_ranking(last_block)
+            preferred_forger = connectivity_ranking[0][0] if connectivity_ranking else None
+            
+            # Find the signer's position in the connectivity ranking
+            signer_position = self.get_position_in_ranking(connectivity_ranking, block.miner_id)
+            
+            # Verify timing: either preferred forger or enough time passed for out-of-turn
+            time_since_last = block.timestamp - last_block.timestamp
+            
+            if block.miner_id == preferred_forger:
+                # Preferred forger can forge immediately after BLOCK_PERIOD
+                if time_since_last < BLOCK_PERIOD:
+                    logger.error(f"Preferred forger {block.miner_id} forged too early: {time_since_last} < {BLOCK_PERIOD}")
+                    return False
+            else:
+                # Out-of-turn forger must wait their staggered delay
+                required_delay = BLOCK_PERIOD + (DELAY_NOTURN * signer_position)
+                if time_since_last < required_delay:
+                    logger.error(f"Out-of-turn forger {block.miner_id} (position {signer_position}) forged too early: {time_since_last} < {required_delay}")
+                    return False
             
             # Verify the difficulty
             expected_difficulty = self.get_difficulty(last_block, block.miner_id)
@@ -93,20 +115,13 @@ class ProofOfConnection:
 
         return True
         
-    def get_forger(self, previous_block, timestamp):
+        
+    def get_connectivity_ranking(self, previous_block):
         """
-        choose the best connected aviable node as a forger each BLOCK_PERIOD. Let him forge a new block
-        if the DELAY_NOTURN time has passed, let any node forge the block
+        Get the ordered list of nodes by connectivity for out-of-turn forging
         
-        returns False (no forger), True (any node can forge) or the enode of the designated forger
+        returns list of (enode, connectivity_value) tuples sorted by connectivity
         """
-        # Calculate the number of missed blocks
-        time_difference = timestamp - previous_block.timestamp
-        
-        # its not time to forge a new block yet
-        if time_difference < BLOCK_PERIOD:
-            return False
-        
         # connectivity = lots of the nodes 
         connectivity = previous_block.state.state_variables['connectivity']
         # change the dict into a list of tuples for shuffling and sorting
@@ -117,15 +132,7 @@ class ProofOfConnection:
         random.shuffle(connectivity)
         # sort connectivity dict by descending connectivity value
         connectivity.sort(key=lambda item: item[1], reverse=True)
-            
-        # the preferred forger gets to forge the block
-        if time_difference < DELAY_NOTURN:
-            # calculate the forger of the next block
-            return connectivity[0][0]
-        
-        # the preferred forger missed his chance, the next best connected node gets to forge the block
-        if time_difference >= DELAY_NOTURN:
-            return True
+        return connectivity
     
     def get_difficulty(self, previous_block, enode):
         """
@@ -134,6 +141,17 @@ class ProofOfConnection:
         connectivity = previous_block.state.state_variables['connectivity'] 
         # Return False if enode is not in the connectivity dictionary (e.g., when forger == True and any node can forge)
         return connectivity.get(enode,-1)+1
+    
+    def get_position_in_ranking(self, connectivity_ranking, enode):
+        """
+        Find the position of an enode in the connectivity ranking
+        
+        returns the index position or None if not found
+        """
+        for i, (node_enode, _) in enumerate(connectivity_ranking):
+            if node_enode == enode:
+                return i
+        return None
         
 class VirtualProofOfConnection():
     """
@@ -153,16 +171,15 @@ class VirtualProofOfConnection():
     def run(self):
         """"
         choose the best connected aviable node as a forger each BLOCK_PERIOD. Let him forge a new block
+        Out-of-turn forging allowed with staggered delays like POA
         """
         node = self.node
         last_block = copy.deepcopy(node.get_block('last'))
         next_block_number = last_block.height + 1 
         timestamp = self.timer.time()
         
-        forger = node.consensus.get_forger(last_block, timestamp)
-        
-        # Still in the Block Period of last block
-        if forger is False:
+        # Check if it's time to forge a new block yet
+        if timestamp < last_block.timestamp + BLOCK_PERIOD:
             return
         
         # No signing if already signed in last N/2+1 blocks
@@ -175,16 +192,42 @@ class VirtualProofOfConnection():
         elif next_block_number - last_signed_block < (signer_count + 1) // 2 + (signer_count + 1) % 2:
             return
         
-        # let only the designated forger forge the block or if the designated forger missed his chance, let any node forge the block
-        if node.enode == forger or forger == True:
-            
+        # Get the connectivity ranking for this block
+        connectivity_ranking = node.consensus.get_connectivity_ranking(last_block)
+        preferred_forger = connectivity_ranking[0][0] if connectivity_ranking else None
+        
+        # Find my position in the connectivity ranking
+        my_position = node.consensus.get_position_in_ranking(connectivity_ranking, node.enode)
+        
+        # Node not in connectivity list
+        if my_position is None:
+            return
+        
+        # If I'm the preferred forger
+        if node.enode == preferred_forger:
             # calculate the difficulty
             difficulty = node.consensus.get_difficulty(last_block,node.enode)
             # check if there is a connectivity value for the node in the state variables, if not the node is not allowed to forge a block
             if difficulty == 0:
                 #logger.error(f"Node {node.id} is not allowed to forge a block")
                 return
-
+        
+        # If it's not my turn, wait with staggered delay (like POA)
+        elif not DELAY_NOTURN:
+            return
+        
+        elif timestamp - last_block.timestamp - BLOCK_PERIOD < DELAY_NOTURN * my_position:
+            return
+        
+        # After staggered wait, do out of turn forging
+        else:
+            logger.info(f"Robot {node.id} forging out of turn (position {my_position})")
+            difficulty = node.consensus.get_difficulty(last_block, node.enode)
+            if difficulty == 0:
+                return
+        
+        # Proceed with block creation
+        if next_block_number > last_block.height and timestamp > (last_block.timestamp + BLOCK_PERIOD - 1):
             # Get the current block, state and mempool
             previous_block = copy.deepcopy(node.get_block('last'))
             previous_state = previous_block.state
@@ -253,7 +296,7 @@ class proofOfConnectionThread(threading.Thread):
             next_block_number = last_block.height+1 
             timestamp = self.timer.get_time()
             
-            forger = self.node.consensus.get_forger(last_block, timestamp)
+            forger = self.node.consensus.get_connectivity_ranking(last_block)[0][0] if self.node.consensus.get_connectivity_ranking(last_block) else None
             
             # Still in the Block Period of last block
             if not forger:
