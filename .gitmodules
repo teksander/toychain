@@ -1,0 +1,3 @@
+[submodule "src/plugins/toychain-explorer"]
+	path = src/plugins/toychain-explorer
+	url = git@github.com:teksander/toychain-explorer.git
