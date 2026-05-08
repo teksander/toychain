@@ -140,7 +140,7 @@ class ProofOfConnection:
         """
         connectivity = previous_block.state.state_variables['connectivity'] 
         # Return False if enode is not in the connectivity dictionary (e.g., when forger == True and any node can forge)
-        return connectivity.get(enode,-1)+1
+        return connectivity.get(enode,-1) +1
     
     def get_position_in_ranking(self, connectivity_ranking, enode):
         """
@@ -182,16 +182,6 @@ class VirtualProofOfConnection():
         if timestamp < last_block.timestamp + BLOCK_PERIOD:
             return
         
-        # No signing if already signed in last N/2+1 blocks
-        connectivity = last_block.state.state_variables['connectivity']
-        signer_count = len(connectivity)
-        last_signed_block = node.get_last_signed_block()
-            
-        if last_signed_block == 0:
-            pass
-        elif next_block_number - last_signed_block < (signer_count + 1) // 2 + (signer_count + 1) % 2:
-            return
-        
         # Get the connectivity ranking for this block
         connectivity_ranking = node.consensus.get_connectivity_ranking(last_block)
         preferred_forger = connectivity_ranking[0][0] if connectivity_ranking else None
@@ -220,11 +210,24 @@ class VirtualProofOfConnection():
             return
         
         # After staggered wait, do out of turn forging
-        else:
-            logger.info(f"Robot {node.id} forging out of turn (position {my_position})")
-            difficulty = node.consensus.get_difficulty(last_block, node.enode)
-            if difficulty == 0:
-                return
+        logger.info(f"Robot {node.id} forging out of turn (position {my_position})")
+        difficulty = node.consensus.get_difficulty(last_block, node.enode)
+        if difficulty < 1:
+            return
+        
+         # No signing if already signed in last N/2+1 blocks
+         # this code is not nesesarry if the contract updates the connectivity vlaues correctly.
+         # producer get a connectivity of -N/2 after forging a block, if the connectivity update function only increases neagtiv connectivity by one each block,
+         # due to the restriction of 
+        connectivity = last_block.state.state_variables['connectivity']
+        signer_count = len(connectivity)
+        last_signed_block = node.get_last_signed_block()
+        
+        if last_signed_block == 0:
+            pass
+        elif next_block_number - last_signed_block < (signer_count + 1) // 2 + (signer_count + 1) % 2:
+           print(f"Node {node.id} signed too recently! still has to wait {((signer_count + 1) // 2 + (signer_count + 1) % 2) - (next_block_number - last_signed_block)} blocks, with difficulty {difficulty}!")
+           return
         
         # Proceed with block creation
         if next_block_number > last_block.height and timestamp > (last_block.timestamp + BLOCK_PERIOD - 1):
@@ -251,9 +254,17 @@ class VirtualProofOfConnection():
             for transaction in block.data:
                 block.state.apply_transaction(transaction, block)
             
-            # Genrateblock reward for last block (except genesis block)    
+            # Genrateblock reward for last block (except genesis block)   
+            # this also upadtes the connectivity values in the state variables for the next block 
             if block.height > 1:
                 block.state.payout_block_reward(previous_block)
+            
+            # Update the connectivity value of the forger in the state variables to have negativ value until hes allowed to fordge again, to prevent him from forging too many blocks in a row and centralization of the blockchain. The value is set to -N/2+1 or -N/2 depending on if N is odd or even, so that the node can forge again after N/2+1 blocks have been forged by other nodes.
+            connectivity = block.state.state_variables['connectivity']
+            signer_count = len(connectivity)
+            connectivity[node.enode] = 1 - ((signer_count + 1) // 2 + (signer_count + 1) % 2)
+                  
+            
 
             # Update the blockchain and mempool
             node.chain.append(block)
