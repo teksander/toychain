@@ -267,7 +267,7 @@ class VirtualProofOfConnection():
             
 
             # Update the blockchain and mempool
-            node.chain.append(block)
+            node.add_block(block, source="local")
             node.previous_transactions_id.update([tx.id for tx in block.data])
             node.mempool.clear()
 
@@ -344,7 +344,7 @@ class proofOfConnectionThread(threading.Thread):
                     block.state.payout_block_reward(previous_block)
 
                 # Update the blockchain and mempool
-                self.node.chain.append(block)
+                self.node.add_block(block, source="local")
                 self.node.previous_transactions_id.update([tx.id for tx in block.data])
                 self.node.mempool.clear()
 
