@@ -1,5 +1,6 @@
 import logging
 import sys
+import importlib
 
 sys.path.append("/home/eksander/toychain-argos/")
 
@@ -10,7 +11,7 @@ from toychain.src.State import Ledger
 from toychain.src.Transaction import Transaction
 from toychain.src.utils.constants import LOCALHOST
 from toychain.src.utils.helpers import gen_enode
-
+run_server = importlib.import_module("toychain.src.plugins.toychain-explorer").run_server
 
 auth_signers = [gen_enode(i) for i in range(1,4)]
 initial_state = Ledger()
@@ -19,9 +20,9 @@ GENESIS_BLOCK = Block(0, 0000, [], auth_signers, 0, 0, 0, nonce = 1, state = ini
 CONSENSUS = ProofOfAuthority(genesis = GENESIS_BLOCK)
 
 # Create the nodes with (id, host, port, consensus_protocol)
-node1 = Node(1, LOCALHOST, 1234, CONSENSUS)
-node2 = Node(2, LOCALHOST, 1235, CONSENSUS)
-node3 = Node(3, LOCALHOST, 1236, CONSENSUS)
+node1 = Node(1, LOCALHOST, 1234, CONSENSUS, publish=True)
+node2 = Node(2, LOCALHOST, 1235, CONSENSUS, publish=True)
+node3 = Node(3, LOCALHOST, 1236, CONSENSUS, publish=True)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -59,7 +60,7 @@ if __name__ == '__main__':
         node1.step()
         node2.step()
         node3.step()
-        # time.sleep(0.05)
+        time.sleep(0.005)
         curr_step += step
         if curr_step>max_steps:
             break

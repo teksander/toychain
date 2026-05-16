@@ -134,7 +134,7 @@ class VirtualMining():
             block.state.payout_block_reward(previous_block)
 
         # Update the blockchain and mempool
-        self.node.chain.append(block)
+        self.node.add_block(block, source="local")
         self.node.previous_transactions_id.update([tx.id for tx in block.data])
         self.node.mempool.clear()
 
@@ -239,7 +239,7 @@ class Mining():
                 block.increase_nonce()
 
             else:
-                self.node.chain.append(block)
+                self.node.add_block(block, source="local")
                 self.node.mempool.clear()
                 logging.info(f"Block produced by Node {self.node.id}: ")
                 logging.info(f"{repr(block)}")
@@ -310,7 +310,7 @@ class MiningThread(threading.Thread):
                 block.increase_nonce()
 
             else:
-                self.node.chain.append(block)
+                self.node.add_block(block, source="local")
                 self.node.mempool.clear()
                 logging.info(f"Block produced by Node {self.node.id}: ")
                 logging.info(f"{repr(block)}")

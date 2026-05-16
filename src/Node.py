@@ -1,10 +1,12 @@
+import importlib
 import urllib.parse, hashlib, json
 
 from toychain.src.Block import Block
 from toychain.src.connections.NodeServerThread import NodeServerThread
 from toychain.src.connections.Pingers import ChainPinger, MemPoolPinger
 from toychain.src.utils.helpers import CustomTimer, create_block_from_list
-from toychain.src.utils.explorer import BlockchainGUI
+
+ExplorerClient = importlib.import_module("toychain.src.plugins.toychain-explorer.client").ExplorerClient
 
 import logging
 logger = logging.getLogger('w3')
@@ -14,7 +16,7 @@ class Node:
     Class representing a 'user' that has his id, his blockchain and his mem-pool
     """
 
-    def __init__(self, id, host, port, consensus):
+    def __init__(self, id, host, port, consensus, publish=False, explorer_url=None):
         self.id = id
         self.chain = []
         self.mempool = {}
@@ -30,6 +32,10 @@ class Node:
         self.enode = f"enode://{self.id}@{self.host}:{self.port}"
 
         self.consensus = consensus
+        self.publish = publish
+        self.explorer_url = explorer_url
+        self.explorer_client = None
+        self.ensure_explorer_client()
 
         # Initialize the genesis Block
         self.chain.append(self.consensus.genesis)
@@ -49,11 +55,10 @@ class Node:
         self.mining = False
         self.mining_thread = consensus.block_generation(self)
 
-        # For visualization only
+        # For explorer UI only
         self.produced_block = ""
         self.explorer = None
-    
-
+        
     @property
     def sc(self):
         return self.get_block('latest').state
@@ -66,24 +71,16 @@ class Node:
         self.mempool_sync_thread.step()
         self.chain_sync_thread.step()
         self.mining_thread.step()
-
-        if self.explorer:
-            self.explorer.send_blocks([block.to_json_string() for block in self.chain])
-            self.explorer.send_transactions(list(self.mempool.values()))
-            self.explorer.display_state(self.chain[-1].state)
-
-        # # Temporary test, should be removed soon:
-        # all_tx_ids = set([tx.id for tx in self.get_all_transactions()])
-        # if all_tx_ids != self.previous_transactions_id:
-        #     print("Some problem with previous transactions set")
     
     def start(self):
+        self.ensure_explorer_client()
         self.start_mining()
         self.start_tcp()
 
     def stop(self):
         self.stop_mining()
         self.stop_tcp()
+        self.close_explorer()
 
     def start_mining(self):
         logger.debug(f"Node {self.id} started mining")
@@ -120,6 +117,7 @@ class Node:
         logger.info("Destroyed")
         self.stop_tcp()
         self.stop_mining()
+        self.close_explorer()
 
     def get_block_number(self):
         """
@@ -140,6 +138,44 @@ class Node:
                 return self.chain[height]
             except IndexError:
                 return None
+
+    def add_block(self, block, received_at=None, source="accepted", publish_event=True):
+        if received_at is None:
+            received_at = self.custom_timer.time()
+
+        block.reception = received_at
+        self.chain.append(block)
+
+        if publish_event:
+            self.on_block_added(block, received_at=received_at, source=source)
+
+        return block
+
+    def on_block_added(self, block, received_at=None, source="accepted"):
+        if received_at is None:
+            received_at = getattr(block, "reception", self.custom_timer.time())
+
+        if source == "local":
+            self.produced_block = block.to_json_string()
+
+        if self.explorer_client:
+            self.explorer_client.publish_block(
+                self.id,
+                self.enode,
+                block,
+                received_at,
+                source=source,
+            )
+
+    def ensure_explorer_client(self):
+        if self.publish and self.explorer_client is None:
+            self.explorer_client = ExplorerClient(self.explorer_url)
+            self.explorer_client.register_node(self.id, self.enode)
+
+    def close_explorer(self):
+        if self.explorer_client:
+            self.explorer_client.close()
+            self.explorer_client = None
 
     def sync_mempool(self, transactions):
         """
@@ -201,7 +237,8 @@ class Node:
                     self.previous_transactions_id.add(transaction.id)
 
             del self.chain[height+1:]
-            self.chain.extend(partial_chain)
+            for block in partial_chain:
+                self.add_block(block, received_at=block.reception, source="sync")
             logger.info(f"Node {self.id} has updated its chain, total difficulty : {self.get_block('last').total_difficulty}, n = {partial_chain[-1].state.state_variables.get('n')}")
             for block in self.chain[-5:]:
                 logger.info(f"{block.__repr__()}   ##{len(block.data)}##  {block.state.state_variables}")
@@ -324,9 +361,6 @@ class Node:
             return int.from_bytes(blake2s_hash.digest(), 'big')
         return blake2s_hash
 
-    def run_explorer(self):
-        self.explorer = BlockchainGUI()
-       
     @property  
     def key(self):
         return self.id
